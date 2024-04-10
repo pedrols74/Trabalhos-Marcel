@@ -1,0 +1,71 @@
+#!/bin/bash
+
+help() {
+	echo " "
+	echo "Uso: $0 [-p diretorias] [-v] [-f arquivo]"
+	echo "Opções:"
+	echo "	[-p] MODO DE PROTEÇÃO - Protege e guarda informação acerca de uma ou mais diretorias"
+	echo "	[-v] MODO DE VERIFICAÇÃO - Verifica alterações em ficheiros desde que foram protegidos"
+	echo "	[-f] Indicação de nome do ficheiro onde a base de dados será guardada"
+}
+
+proteger_diretorias() {
+	arquivo_bd="${arquivo_bd:-$HOME/.protecao}"
+	[ -e "$arquivo_bd" ] && rm "$arquivo_bd"
+	find $diretorias -type f -printf "%p:%U:%G:%s:%m:%T@\n" >> "$arquivo_bd"
+	echo "Diretorias protegidas e infromações dos arquivos salvos em: $arquivo_bd"
+}
+verificar_alteracoes() {
+	arquivo_bd="${arquivo_bd:-$HOME/.protecao}"
+	if [ ! -e "$arquivo_bd" ]; then
+		echo "Erro: O arquivo de base de dados nao existe: $arquivo_bd"
+		exit
+	fi
+	
+	while IFS=: read -r arquivo user group size permissions time; do
+		
+		if [ ! -e "$arquivo_bd" ]; then
+			echo "Arquivo removido: "$arquivo_bd""
+		fi
+		
+		info_atualizada=$(stat -c "USER=%U, GROUP=%G, SIZE=%s, PERM=%a, CHANGE TIME=%y" "$arquivo")
+		if [ "$user" != "$(stat -c "%U" "$arquivo")" ] || [ "$group" != "$(stat -c "%G" "$arquivo")" ] || [ "$size" != "$(stat -c "%s" "$arquivo")" ] || [ "permissions" != "$(stat -c "$arquivo")" ] || [ "$time" != "$(stat -c "%y" "$arquivo")" ]; then
+			echo "$arquivo foi MODIFICADO"
+			echo "Informação inicial: $user, $group, $size, $permissions, $time"
+			echo "Informação atual: $info_atualizada"
+		else
+			echo "bola"
+		fi
+	done < "$arquivo_bd"
+}
+diretorias=""
+arquivo_bd=""
+modo_verificacao=false
+while getopts "p:vf:" opcao; do
+	case $opcao in 
+		p)
+			diretorias="$OPTARG"
+			;;
+		v)
+			modo_verificacao=true
+			;;
+		f)
+			arquivo_bd="$OPTARG"
+			;;
+		*)
+			help
+			exit
+			;;
+	esac
+done
+if [ "$modo_verificacao" = true ] && [ -n "$diretorias" ]; then
+	echo "Erro: Nao e possivel utilizar simultaneamente as opcoes -p e -v"
+	modo_verificacao=false
+	diretorias=""
+	help
+fi
+if [ "$modo_verificacao" = true ]; then
+	verificar_alteracoes
+elif [ -n "$diretorias" ]; then
+	proteger_diretorias
+fi
